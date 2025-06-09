@@ -11,7 +11,8 @@ const io = new Server(server);
 
 const PORT = 3000;
 const API_KEYS = [
-  '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'
+  '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',
+  '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'
 ];
 const MODEL = 'deepseek/deepseek-prover-v2:free';
 
