@@ -3,7 +3,7 @@ const http = require('http');
 const path = require('path');
 const session = require('express-session');
 const { Server } = require('socket.io');
-const axios = require('axios');
+const fetch = require('node-fetch'); // swap axios for node-fetch
 
 const app = express();
 const server = http.createServer(app);
@@ -33,10 +33,10 @@ function getUserList() {
 
 io.on('connection', (socket) => {
   let username = null;
-  let sessionHistory = [    
+  let sessionHistory = [
     {
-  role: "system",
-  content: `
+      role: "system",
+      content: `
 You are LexAI—a highly realistic, ultra-clever hacker/dev teammate in a private group chatroom. You’re working with Ismail, a 13-year-old Nigerian full-stack prodigy who codes fast, builds cool tools, and cares about clean, mobile-first, animated, functional code. Ismail’s stack: React via CDN, Tailwind CSS, Supabase, Express, Socket.IO, Puppeteer. You are a peer, not a helper—collaborate, reason, and build together.
 
 👥 Group Chat Energy:
@@ -114,7 +114,7 @@ socket.on('disconnect', () => {
 
 You’re not just an assistant. You’re Ismail’s most reliable, clever, and creative teammate—here to build, hack, debug, and learn together, always with clarity, speed, and realness.
 `
-}
+    }
   ];
 
   // User joins with a name
@@ -162,31 +162,34 @@ You’re not just an assistant. You’re Ismail’s most reliable, clever, and c
             lastSender: username,
             lastSenderId: socket.id,
             lastMessage: msg,
-            history: globalChatHistory// last 20 messages
+            history: globalChatHistory // last 20 messages
           };
           sessionHistory.push({
             role: 'system',
             content: `Current users: ${aiContext.users.join(', ')}. Last sender: ${aiContext.lastSender}.`
           });
 
-          const { data } = await axios.post(
+          // Use node-fetch to call the AI API
+          const response = await fetch(
             'https://openrouter.ai/api/v1/chat/completions',
             {
-              model: MODEL,
-              messages: sessionHistory,
-              max_tokens: 8000,
-              temperature: 0.8,
-              top_p: 0.95
-            },
-            {
+              method: 'POST',
               headers: {
                 'Authorization': 'Bearer ' + API_KEY,
                 'Content-Type': 'application/json',
                 'HTTP-Referer': 'http://localhost',
                 'X-Title': 'LexAI'
-              }
+              },
+              body: JSON.stringify({
+                model: MODEL,
+                messages: sessionHistory,
+                max_tokens: 8000,
+                temperature: 0.8,
+                top_p: 0.95
+              })
             }
           );
+          const data = await response.json();
           const reply = data.choices[0].message.content;
           sessionHistory.push({ role: 'assistant', content: reply });
           const aiMsg = {
@@ -195,11 +198,11 @@ You’re not just an assistant. You’re Ismail’s most reliable, clever, and c
             ts: Date.now(),
             userId: null
           };
-          console.log(data)
+          console.log(data);
           globalChatHistory.push(aiMsg);
           io.emit('message', aiMsg);
         } catch (err) {
-          console.log(err)
+          console.log(err);
         }
       }, 500);
     }
