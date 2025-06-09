@@ -162,7 +162,7 @@ You’re not just an assistant. You’re Ismail’s most reliable, clever, and c
             lastSender: username,
             lastSenderId: socket.id,
             lastMessage: msg,
-            history: globalChatHistory.slice(-20) // last 20 messages
+            history: globalChatHistory// last 20 messages
           };
           sessionHistory.push({
             role: 'system',
@@ -199,7 +199,7 @@ You’re not just an assistant. You’re Ismail’s most reliable, clever, and c
           globalChatHistory.push(aiMsg);
           io.emit('message', aiMsg);
         } catch (err) {
-          // Optionally, show error message from the AI
+          console.log(err)
         }
       }, 500);
     }
