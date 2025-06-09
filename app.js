@@ -10,7 +10,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = 3000;
-const API_KEY = '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';
+const API_KEY = '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';
 const MODEL = 'deepseek/deepseek-prover-v2:free';
 
 // Track users in-memory
