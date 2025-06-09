@@ -3,14 +3,17 @@ const http = require('http');
 const path = require('path');
 const session = require('express-session');
 const { Server } = require('socket.io');
-const fetch = require('node-fetch'); // swap axios for node-fetch
+const fetch = require('node-fetch'); // Use node-fetch, not axios
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = 3000;
-const API_KEY = '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';
+const API_KEYS = [
+  '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',
+  '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'
+];
 const MODEL = 'deepseek/deepseek-prover-v2:free';
 
 // Track users in-memory
@@ -29,6 +32,47 @@ app.use(session({
 // Helper: Get all active usernames
 function getUserList() {
   return Object.values(users).map(u => u.name);
+}
+
+// Helper: Try OpenRouter API with retry on fail
+async function fetchAI(sessionHistory) {
+  const url = 'https://openrouter.ai/api/v1/chat/completions';
+  const body = JSON.stringify({
+    model: MODEL,
+    messages: sessionHistory,
+    max_tokens: 8000,
+    temperature: 0.8,
+    top_p: 0.95
+  });
+
+  for (let i = 0; i < API_KEYS.length; i++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + API_KEYS[i],
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'http://localhost',
+          'X-Title': 'LexAI'
+        },
+        body
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText);
+      }
+      const data = await response.json();
+      if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+        throw new Error('OpenRouter: Unexpected response shape');
+      }
+      return { ok: true, reply: data.choices[0].message.content };
+    } catch (err) {
+      if (i === API_KEYS.length - 1) {
+        return { ok: false, error: err.message || err.toString() };
+      }
+      // else, try next key
+    }
+  }
 }
 
 io.on('connection', (socket) => {
@@ -155,54 +199,40 @@ You’re not just an assistant. You’re Ismail’s most reliable, clever, and c
       sessionHistory.push({ role: 'user', content: `${username}: ${msg}` });
 
       setTimeout(async () => {
-        try {
-          // LexAI can now see user list & sender info
-          const aiContext = {
-            users: getUserList(),
-            lastSender: username,
-            lastSenderId: socket.id,
-            lastMessage: msg,
-            history: globalChatHistory // last 20 messages
-          };
-          sessionHistory.push({
-            role: 'system',
-            content: `Current users: ${aiContext.users.join(', ')}. Last sender: ${aiContext.lastSender}.`
-          });
+        // LexAI can now see user list & sender info
+        const aiContext = {
+          users: getUserList(),
+          lastSender: username,
+          lastSenderId: socket.id,
+          lastMessage: msg,
+          history: globalChatHistory // last 20 messages
+        };
+        sessionHistory.push({
+          role: 'system',
+          content: `Current users: ${aiContext.users.join(', ')}. Last sender: ${aiContext.lastSender}.`
+        });
 
-          // Use node-fetch to call the AI API
-          const response = await fetch(
-            'https://openrouter.ai/api/v1/chat/completions',
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': 'Bearer ' + API_KEY,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'http://localhost',
-                'X-Title': 'LexAI'
-              },
-              body: JSON.stringify({
-                model: MODEL,
-                messages: sessionHistory,
-                max_tokens: 8000,
-                temperature: 0.8,
-                top_p: 0.95
-              })
-            }
-          );
-          const data = await response.json();
-          const reply = data.choices[0].message.content;
-          sessionHistory.push({ role: 'assistant', content: reply });
+        // Try OpenRouter, retry with 2nd key if fail, else error msg
+        const result = await fetchAI(sessionHistory);
+
+        if (result.ok) {
+          sessionHistory.push({ role: 'assistant', content: result.reply });
           const aiMsg = {
             from: "LexAI",
-            text: reply,
+            text: result.reply,
             ts: Date.now(),
             userId: null
           };
-          console.log(data);
           globalChatHistory.push(aiMsg);
           io.emit('message', aiMsg);
-        } catch (err) {
-          console.log(err);
+        } else {
+          // Show error to user, then say come back tomorrow
+          io.emit('message', {
+            from: "LexAI",
+            text: `<div class="bg-red-100 border border-red-300 text-red-700 rounded-md p-3 mb-2">Sorry, my brain is fried: <span class="italic">${result.error}</span><br>Try again or <b>come back tomorrow</b>! 💤</div>`,
+            ts: Date.now(),
+            userId: null
+          });
         }
       }, 500);
     }
