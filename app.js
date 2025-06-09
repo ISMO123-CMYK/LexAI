@@ -190,7 +190,7 @@ You’re not just an assistant. You’re Ismail’s most reliable, clever, and c
             }
           );
           const data = await response.json();
-          const reply = data.choices[0].message.content;
+          const reply = JSON.stringify(data);
           sessionHistory.push({ role: 'assistant', content: reply });
           const aiMsg = {
             from: "LexAI",
