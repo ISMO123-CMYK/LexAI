@@ -11,7 +11,7 @@ const io = new Server(server);
 
 const PORT = 3000;
 const API_KEY = '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';
-const MODEL = 'deepseek/deepseek-r1-0528';
+const MODEL = 'deepseek/deepseek-r1-0528:free';
 
 // Track users in-memory
 let users = {}; // { [socket.id]: { name, joinedAt } }
